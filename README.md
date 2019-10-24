@@ -11,10 +11,8 @@ First, you need to download and install chromedriver and make sure your chrome v
 To install using pip:
 
 ```
-pip install fbpostscraper
+pip3 install fbpostscraper
 ```
-
-(Note: this uses python3. If python2 is still default on your system, use `pip3`)
 
 To install by cloning from github (e.g. to edit the scraper):
 
