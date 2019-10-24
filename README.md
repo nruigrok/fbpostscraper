@@ -30,6 +30,13 @@ To scrape e.g. the New York Times facebook posts into a `posts.csv` file:
 ```
 python3 -m fbpostscraper -u USERNAME -p PASSWORD nytimes > posts.csv
 ```
+or if you installed python in a virtual environment `env`:
+```
+env/bin/python3 -m fbpostscraper -u USERNAME -p PASSWORD nytimes > posts.csv
+```
+
+
+
 
 Since having your facebook password in your bash history is probably not a good idea, it is recommended
 to copy the [fbcredentials_example.py](fbcredentials_example.py) file to fbcredentials.py and enter your credentials there.
