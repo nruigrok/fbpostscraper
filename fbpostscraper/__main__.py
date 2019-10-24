@@ -5,7 +5,7 @@ Make sure chrome and chromedriver are installed, see https://github.com/nruigrok
 Output is a csv file written to standard out.
 """
 
-from fbpostscraper.fbpostscraper import get_driver, login, scroll, get_posts
+from fbpostscraper.fbpostscraper import FBPostScraper
 import argparse
 import sys
 import csv
@@ -41,21 +41,16 @@ if username is None:
 if password is None:
     if fbcredentials.password is None:
         raise ValueError("Password not given in fbcredentials")
+    password = fbcredentials.password
 
-driver = get_driver()
+logging.info(f"Logging in to facebook as {username}")
+scraper = FBPostScraper(username, password)
 try:
-    logging.info(f"Logging in to facebook as {username}")
-    login(driver, username, password)
-    logging.info(f"Opening page {args.page}")
-    driver.get(f"https://facebook.com/{args.page}")
-    logging.debug(f"Scrolling to bottom of post history")
-    scroll(driver, max_scrolls=args.max_scrolls)
-
     w = csv.writer(sys.stdout)
-    for i, post in enumerate(get_posts(driver)):
+    for i, post in enumerate(scraper.get_page_posts(args.page, max_scrolls=args.max_scrolls)):
         if i == 0:
             keys = list(post.keys())
             w.writerow(post.keys())
         w.writerow([post[k] for k in keys])
 finally:
-    driver.close()
+    scraper.driver.close()
