@@ -1,4 +1,6 @@
-from itertools import count
+# login and scroll routine are based on
+# https://github.com/harismuneer/Ultimate-Facebook-Scraper
+
 
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.options import Options
