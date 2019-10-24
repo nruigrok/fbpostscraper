@@ -5,7 +5,7 @@ Make sure chrome and chromedriver are installed, see https://github.com/nruigrok
 Output is a csv file written to standard out.
 """
 
-from fbpostscraper.fbpostscraper import FBPostScraper
+from fbpostscraper import FBPostScraper
 import argparse
 import sys
 import csv
