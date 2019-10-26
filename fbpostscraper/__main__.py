@@ -51,26 +51,34 @@ if password is None:
         raise ValueError("Password not given in fbcredentials")
     password = fbcredentials.password
 
-date = datetime.strptime(args.date, "%d-%m-%Y")
+date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else None
 
 logging.info(f"Logging in to facebook as {username}")
 scraper = FBPostScraper(username, password)
 try:
-    posts = list(scraper.get_posts(args.page, max_scrolls=args.max_scrolls, date_from=date))
+    posts = scraper.get_posts(args.page, max_scrolls=args.max_scrolls, date_from=date)
+
+    if args.amcathost:
+        conn = AmcatAPI(args.amcathost)
+        buffer = []
+        for p in posts:
+            buffer.append(p)
+            if len(buffer) >= 10:
+                logging.info(f"Saving {len(buffer)} articles to {args.amcathost} project {args.project} set {args.set}")
+                conn.create_articles(project=args.project, articleset=args.set, json_data=buffer)
+                buffer = []
+        if buffer:
+            conn.create_articles(project=args.project, articleset=args.set, json_data=buffer)
+    else:
+        w = csv.writer(sys.stdout)
+        for i, post in enumerate(posts):
+            if i == 0:
+                keys = list(post.keys())
+                w.writerow(post.keys())
+            w.writerow([post[k] for k in keys])
+
 finally:
     pass#scraper.driver.close()
-
-if args.amcathost:
-    conn = AmcatAPI("http://localhost:8000")
-    conn.create_articles(project=args.project, articleset=args.set, json_data=posts)
-else:
-    w = csv.writer(sys.stdout)
-    for i, post in enumerate(posts):
-        if i == 0:
-            keys = list(post.keys())
-            w.writerow(post.keys())
-        w.writerow([post[k] for k in keys])
-
 
 
 

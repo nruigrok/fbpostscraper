@@ -16,9 +16,16 @@ from datetime import datetime
 
 
 def fbposturl(url):
-    if "?__xts__" not in url:
-        raise ValueError(f"Cannot parse url {url}")
-    url = url.split("?__xts__")[0]
+    try:
+        if "?__xts__" in url:
+            url = url.split("?__xts__")[0]
+    except NoSuchElementException:
+        logging.debug(f"Cannot parse url {url}")
+        try:
+            if "?type=" in url:
+                url = url.split("?__xts__")[0]
+        except NoSuchElementException:
+            logging.debug(f"Cannot parse url {url}")
     return f"https://www.facebook.com/{url}"
 
 
