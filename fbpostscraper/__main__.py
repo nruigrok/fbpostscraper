@@ -4,6 +4,7 @@ Selenium-based Facebook Post scraper.
 Make sure chrome and chromedriver are installed, see https://github.com/nruigrok/fbpostscraper.
 Output is a csv file written to standard out.
 """
+from amcatclient import AmcatAPI
 
 from fbpostscraper import FBPostScraper
 import argparse
@@ -14,10 +15,13 @@ import logging
 parser = argparse.ArgumentParser(description=__doc__, prog="python -m fbpostscraper")
 parser.add_argument("page", help="Name of the FB page to scrape")
 parser.add_argument("--username", "-u", help="Username to login to FB. Can also supply from fbcredentials_example.py file")
-parser.add_argument("--password", "-p", help="Password to login to FB. Can also supply from fbcredentials_example.py file")
+parser.add_argument("--password", "-P", help="Password to login to FB. Can also supply from fbcredentials_example.py file")
 parser.add_argument("--verbose", "-v", help="Verbose mode: also print debug messages",  action="store_true")
 parser.add_argument("--quiet", "-q", help="Quiet mode: only print warning and error messages",  action="store_true")
 parser.add_argument("--max-scrolls", "-m", type=int, default=10, help="Maximum number of pages to scroll down")
+parser.add_argument("--amcathost", "-a", help="Location of your AmCAT")
+parser.add_argument("--project", "-p", help="Projectid in AmCAT")
+parser.add_argument("--set", "-s", help="Setid in AmCAT")
 
 args = parser.parse_args()
 
@@ -46,11 +50,30 @@ if password is None:
 logging.info(f"Logging in to facebook as {username}")
 scraper = FBPostScraper(username, password)
 try:
+    posts = list(scraper.get_page_posts(args.page, max_scrolls = args.max_scrolls))
+finally:
+    scraper.driver.close()
+if args.amcathost:
+    conn = AmcatAPI("http://localhost:8000")
+    articles = []
+    for post in posts:
+        p = post["post_url"]
+        article = {"title": post["headline"], "text": post["message"], "date": post["date"], "comments": post["ncomments"],
+                   "reactions": post["reactions"], "shares": post["nshares"], "post_url": post["post_url"]}
+        if post["link"]:
+            article["article_url"] = post["link"]
+        articles.append(article)
+    conn.create_articles(project=args.project, articleset=args.set, json_data=articles)
+else:
     w = csv.writer(sys.stdout)
-    for i, post in enumerate(scraper.get_page_posts(args.page, max_scrolls=args.max_scrolls)):
+    for i, post in enumerate(posts):
         if i == 0:
             keys = list(post.keys())
             w.writerow(post.keys())
         w.writerow([post[k] for k in keys])
-finally:
-    scraper.driver.close()
+
+
+
+
+
+
