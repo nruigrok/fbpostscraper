@@ -11,6 +11,8 @@ import argparse
 import sys
 import csv
 import logging
+from datetime import datetime
+
 
 parser = argparse.ArgumentParser(description=__doc__, prog="python -m fbpostscraper")
 parser.add_argument("page", help="Name of the FB page to scrape")
@@ -22,6 +24,8 @@ parser.add_argument("--max-scrolls", "-m", type=int, default=10, help="Maximum n
 parser.add_argument("--amcathost", "-a", help="Location of your AmCAT")
 parser.add_argument("--project", "-p", help="Projectid in AmCAT")
 parser.add_argument("--set", "-s", help="Setid in AmCAT")
+parser.add_argument("--date", "-d", help="Date from which to scrape")
+
 
 args = parser.parse_args()
 
@@ -47,23 +51,18 @@ if password is None:
         raise ValueError("Password not given in fbcredentials")
     password = fbcredentials.password
 
+date = datetime.strptime(args.date, "%d-%m-%Y")
+
 logging.info(f"Logging in to facebook as {username}")
 scraper = FBPostScraper(username, password)
 try:
-    posts = list(scraper.get_page_posts(args.page, max_scrolls = args.max_scrolls))
+    posts = list(scraper.get_posts(args.page, max_scrolls=args.max_scrolls, date_from=date))
 finally:
-    scraper.driver.close()
+    pass#scraper.driver.close()
+
 if args.amcathost:
     conn = AmcatAPI("http://localhost:8000")
-    articles = []
-    for post in posts:
-        p = post["post_url"]
-        article = {"title": post["headline"], "text": post["message"], "date": post["date"], "comments": post["ncomments"],
-                   "reactions": post["reactions"], "shares": post["nshares"], "post_url": post["post_url"]}
-        if post["link"]:
-            article["article_url"] = post["link"]
-        articles.append(article)
-    conn.create_articles(project=args.project, articleset=args.set, json_data=articles)
+    conn.create_articles(project=args.project, articleset=args.set, json_data=posts)
 else:
     w = csv.writer(sys.stdout)
     for i, post in enumerate(posts):
