@@ -133,16 +133,28 @@ class FBPostScraper:
 
     def scrape_post(self, e: WebElement) -> dict:
         msg = e.find_element_by_css_selector(".userContent").text
-        date = e.find_element_by_css_selector("abbr._5ptz")
-        date = date.get_attribute("title")
-        date = datetime.strptime(date, "%d-%m-%Y %H:%M")
         try:
             headline = e.find_element_by_css_selector(".mbs._6m6._2cnj._5s6c").text
         except NoSuchElementException:
             logging.debug(f"No headline by: {e}")
             headline = "-"
-        url = e.find_element_by_css_selector(".fsm > ._5pcq")
-        url = fbposturl(url.get_attribute("href"))
+            print(headline)
+        try:
+            url = e.find_element_by_css_selector(".fsm > ._5pcq")
+            url = fbposturl(url.get_attribute("href"))
+        except NoSuchElementException:
+            logging.debug(f"No url by: {e}")
+            url = "-"
+            print(url)
+        try:
+            date = e.find_element_by_css_selector("abbr._5ptz")
+            date = date.get_attribute("title")
+            date = datetime.strptime(date, "%d-%m-%Y %H:%M")
+        except NoSuchElementException:
+            logging.debug(f"No headline by: {e}")
+            date = "01-01-1990 00:00"
+            date = datetime.strptime(date, "%d-%m-%Y %H:%M")
+            print(date)
         article = dict(title=headline, date=date, text=msg, url=url)
         try:
             reaction = e.find_element_by_css_selector("._81hb").text
