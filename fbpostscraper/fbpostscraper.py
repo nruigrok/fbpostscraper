@@ -132,20 +132,24 @@ class FBPostScraper:
         WebDriverWait(self.driver, timeout, 0.05).until(check_height)
 
     def scrape_post(self, e: WebElement) -> dict:
-        msg = e.find_element_by_css_selector(".userContent").text
+        try:
+            msg = e.find_element_by_css_selector(".userContent").text
+        except NoSuchElementException:
+            logging.debug(f"No text by: {e}")
+            msg = "-"
         try:
             headline = e.find_element_by_css_selector(".mbs._6m6._2cnj._5s6c").text
         except NoSuchElementException:
             logging.debug(f"No headline by: {e}")
             headline = "-"
-            print(headline)
+        print(headline)
         try:
             url = e.find_element_by_css_selector(".fsm > ._5pcq")
             url = fbposturl(url.get_attribute("href"))
         except NoSuchElementException:
             logging.debug(f"No url by: {e}")
             url = "-"
-            print(url)
+        print(url)
         try:
             date = e.find_element_by_css_selector("abbr._5ptz")
             date = date.get_attribute("title")
@@ -154,7 +158,7 @@ class FBPostScraper:
             logging.debug(f"No headline by: {e}")
             date = "01-01-1990 00:00"
             date = datetime.strptime(date, "%d-%m-%Y %H:%M")
-            print(date)
+        print(date)
         article = dict(title=headline, date=date, text=msg, url=url)
         try:
             reaction = e.find_element_by_css_selector("._81hb").text
