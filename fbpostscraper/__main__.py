@@ -4,8 +4,8 @@ Selenium-based Facebook Post scraper.
 Make sure chrome and chromedriver are installed, see https://github.com/nruigrok/fbpostscraper.
 Output is a csv file written to standard out.
 """
-from amcatclient import AmcatAPI
 
+from amcatclient import AmcatAPI
 from fbpostscraper import FBPostScraper
 import argparse
 import sys
@@ -24,7 +24,8 @@ parser.add_argument("--max-scrolls", "-m", type=int, default=10, help="Maximum n
 parser.add_argument("--amcathost", "-a", help="Location of your AmCAT")
 parser.add_argument("--project", "-p", help="Projectid in AmCAT")
 parser.add_argument("--set", "-s", help="Setid in AmCAT")
-parser.add_argument("--date", "-d", help="Date from which to scrape")
+parser.add_argument("--fromdate", "-f", help="Date from which to scrape")
+parser.add_argument("--todate", "-t", help="Date from which to scrape")
 
 
 args = parser.parse_args()
@@ -51,12 +52,13 @@ if password is None:
         raise ValueError("Password not given in fbcredentials")
     password = fbcredentials.password
 
-date = datetime.strptime(args.date, "%Y-%m-%d") if args.date else None
+from_date = datetime.strptime(args.fromdate, "%Y-%m-%d") if args.fromdate else None
+to_date = datetime.strptime(args.todate, "%Y-%m-%d") if args.todate else None
 
 logging.info(f"Logging in to facebook as {username}")
 scraper = FBPostScraper(username, password)
 try:
-    posts = scraper.get_posts(args.page, max_scrolls=args.max_scrolls, date_from=date)
+    posts = scraper.get_posts(args.page, max_scrolls=args.max_scrolls, date_from=from_date, date_to=to_date)
 
     if args.amcathost:
         conn = AmcatAPI(args.amcathost)

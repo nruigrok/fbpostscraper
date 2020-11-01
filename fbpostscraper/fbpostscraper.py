@@ -4,6 +4,8 @@ from urllib.parse import unquote
 from amcatclient import AmcatAPI
 
 import amcatclient
+import locale
+import datetime
 
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.options import Options
@@ -12,7 +14,7 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.wait import WebDriverWait
 import logging
 import re
-from datetime import datetime
+
 
 
 def fbposturl(url):
@@ -26,7 +28,8 @@ def fbposturl(url):
                 url = url.split("?__xts__")[0]
         except NoSuchElementException:
             logging.debug(f"Cannot parse url {url}")
-    return f"https://www.facebook.com/{url}"
+    #return f"https://www.facebook.com/{url}"
+    return url
 
 
 def fburl(url):
@@ -34,6 +37,8 @@ def fburl(url):
         url = url[len("https://l.facebook.com/l.php?u="):]
         url = unquote(url)
         url = re.sub(r"\?fbclid=[\w-]+&h=[\w-]+$", "", url)
+    else:
+        url = "-"
     return url
 
 
@@ -48,15 +53,23 @@ def fbnumber(text):
     return int(num)
 
 
+def get_browser_preferences():
+    yield "dom.push.enabled", False
+
+DRIVER = None
 def get_driver():
     options = Options()
-    #  Code to disable notifications pop up of Chrome Browser
     options.add_argument("--disable-notifications")
     options.add_argument("--disable-infobars")
     options.add_argument("--mute-audio")
-    # options.add_argument("headless")
-    # install chrome web driver from http://chromedriver.chromium.org/downloads
-    return webdriver.Chrome(executable_path="./chromedriver", options=options)
+ #   options.add_argument("dom.push.enabled", False)
+    fp = webdriver.FirefoxProfile()
+    for k, v in get_browser_preferences():
+        fp.set_preference(k, v)
+    driver = webdriver.Firefox(firefox_profile=fp)
+    global DRIVER
+    DRIVER = driver
+    return driver
 
 
 class FBPostScraper:
@@ -81,11 +94,11 @@ class FBPostScraper:
         # clicking on login button
         def click_login(driver):
             try:
-                driver.find_element_by_id('loginbutton').click()
+                driver.find_element_by_id('u_0_d').click()
                 return True
             except NoSuchElementException:
                 return False
-        WebDriverWait(self.driver, 5, 0.5).until(click_login)
+        WebDriverWait(self.driver, 5, 1).until(click_login)
 
         # if your account uses multi factor authentication
         mfa_code_input = self.safe_find_element_by_id('approvals_code')
@@ -104,22 +117,65 @@ class FBPostScraper:
 
             self.driver.find_element_by_id('checkpointSubmitButton').click()
 
-    def get_posts(self, page, max_scrolls=10, date_from=None):
+    def get_posts(self, page, max_scrolls=100000, date_from=None, date_to=None):
         self.driver.get(f"https://facebook.com/{page}")
-        scraped_ids = set()
-        post_xpath = "//div[@class='_4-u2 mbm _4mrt _5jmm _5pat _5v3q _7cqq _4-u8']"
+        scraped_urls = set()
+        post_xpath = "//div[@class='du4w35lb k4urcfbm l9j0dhe7 sjgh65i0']"
+        posts_counter = 1
+        def has_more_posts(driver):
+            nonlocal posts_counter
+            nposts = len(self.driver.find_elements_by_xpath(post_xpath))
+            logging.info(f"Found {nposts} posts, had {posts_counter} posts")
+            result = nposts > posts_counter
+            posts_counter = nposts
+            return result
+        WebDriverWait(self.driver, 5, 1).until(has_more_posts)
         for i in range(max_scrolls):
-            logging.info(f"... scroll {i}/{max_scrolls}, scraped {len(scraped_ids)} articles so far")
+            logging.info(f"... scroll {i}/{max_scrolls}, scraped {len(scraped_urls)} articles so far")
             self.scroll_once()
+            WebDriverWait(self.driver, 5, 1).until(has_more_posts)
             for e in self.driver.find_elements_by_xpath(post_xpath):
-                id = e.get_attribute("id")
-                if id not in scraped_ids:
-                    post = self.scrape_post(e)
+                try:
+                    id = e.find_element_by_xpath(".//a[@class='oajrlxb2 g5ia77u1 qu0x051f esr5mh6w e9989ue4 r7d6kgcz rq0escxv nhd2j8a9 a8c37x1j p7hjln8o kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x jb3vyjys rz4wbd8a qt6c0cv9 a8nywdso i1ao9s8h esuyzwwr f1sip0of lzcic4wl gmql0nx0 p8dawk7l']")
+                    url = id.get_attribute("href")
+                except NoSuchElementException:
+                    # maybe it's a video link
+                    try:
+                        video = e.find_element_by_css_selector("video.k4urcfbm.datstx6m.a8c37x1j")
+                        url = video.get_attribute("src")
+                    except NoSuchElementException:
+                        # maybe it is a different video link
+                        try:
+                            video = e.find_element_by_css_selector("div.i09qtzwb.rq0escxv.n7fi1qx3.pmk7jnqg.j9ispegn.kr520xx4.bp9cbjyn.j83agx80.taijpn5t")
+                            url = video.get_attribute("src")
+                        except NoSuchElementException:
+                            # maybe it is just a photo
+                            try:
+                                img = e.find_element_by_xpath(".//img[@class='i09qtzwb n7fi1qx3 datstx6m pmk7jnqg j9ispegn kr520xx4 k4urcfbm bixrwtb6']")
+                                url = img.get_attribute("src")
+                            except NoSuchElementException:
+                                # maybe it is just another photo
+                                try:
+                                    img = e.find_element_by_xpath(
+                                        ".//img[@class='k4urcfbm bixrwtb6 datstx6m q9uorilb']")
+                                    url = img.get_attribute("src")
+                                except NoSuchElementException:
+                                    try:
+                                        id = e.find_element_by_xpath(
+                                            ".//a[@class='oajrlxb2 g5ia77u1 qu0x051f esr5mh6w e9989ue4 r7d6kgcz rq0escxv nhd2j8a9 nc684nl6 p7hjln8o kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x jb3vyjys rz4wbd8a qt6c0cv9 a8nywdso i1ao9s8h esuyzwwr f1sip0of lzcic4wl gmql0nx0 gpro0wi8 datstx6m pmk7jnqg j9ispegn kr520xx4 k4urcfbm tkr6xdv7']")
+                                        url = id.get_attribute("href")
+                                    except NoSuchElementException:
+                                        continue
+               # print(f"gevonden{url} in scraped ids? {url in scraped_urls}")
+                if url not in scraped_urls:
+                    post = self.scrape_post(e, url)
                     if date_from and post['date'] < date_from:
                         logging.info(f"Last post is from {post['date']} < {date_from}, returning")
                         return
+                    if date_to and post['date'] > date_to:
+                        continue
                     yield post
-                scraped_ids.add(id)
+                scraped_urls.add(url)
 
     def scroll_once(self, timeout=8):
         old_height = self.driver.execute_script("return document.body.scrollHeight")
@@ -129,16 +185,42 @@ class FBPostScraper:
             return new_height != old_height
 
         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        WebDriverWait(self.driver, timeout, 0.05).until(check_height)
+#        WebDriverWait(self.drwwq222iver, timeout, 0.5).until(check_height)
 
-    def scrape_post(self, e: WebElement) -> dict:
+    def scrape_post(self, e: WebElement, url: str) -> dict:
+        date = e.find_element_by_css_selector("span.tojvnm2t.a6sixzi8.abs2jz4q.a8s20v7p.t1p8iaqh.k5wvi7nf.q3lfd5jv.pk4s997a.bipmatt0.cebpdrjk.qowsmv63.owwhemhu.dp1hu0rb.dhp61c6y.iyyx5f41").text
+        print(0, date)
+        if not date:
+    #except NoSuchElementException:
+            date = e.find_element_by_css_selector("a.oajrlxb2.g5ia77u1.qu0x051f.esr5mh6w.e9989ue4.r7d6kgcz.rq0escxv.nhd2j8a9.nc684nl6.p7hjln8o.kvgmc6g5.cxmmr5t8.oygrvhab.hcukyx3x.jb3vyjys.rz4wbd8a.qt6c0cv9.a8nywdso.i1ao9s8h.esuyzwwr.f1sip0of.lzcic4wl.gmql0nx0.gpro0wi8.b1v8xokw").text
+            print(1,date)
+        locale.setlocale(locale.LC_ALL, 'nl_NL.UTF-8')
+        if re.search(r'\du', date):
+            date = datetime.datetime.today()
+            print(2,date)
+        elif re.search(r'\dm',date):
+            date = datetime.datetime.today()
+            print(3,date)
+        elif 'Gisteren' in date:
+            datum = datetime.datetime.today()
+            date = datum - datetime.timedelta(days=1)
+            print(4,date)
+        elif re.search(r'om', date):
+            m = re.match(r"(\d+ \w+) om (\d\d:\d\d)", date)
+            date, time = m.groups()
+            date = f"{date} 2020 {time}"
+            date = datetime.datetime.strptime(date, "%d %B %Y %H:%M")
+            print(5, date)
+        else:
+            m = re.match(r"(\d+ \w+)", date)
+            date = m[1]
+            date = f"{date} 2020"
+            print(9,date)
+            date = datetime.datetime.strptime(date, "%d %B %Y")
+          #  date = datetime.datetime.strptime(date, "%d %B")
+            print(6, date)
         try:
-            msg = e.find_element_by_css_selector(".userContent").text
-        except NoSuchElementException:
-            logging.debug(f"No text by: {e}")
-            msg = "-"
-        try:
-            headline = e.find_element_by_css_selector(".mbs._6m6._2cnj._5s6c").text
+            headline = e.find_element_by_css_selector("a.oajrlxb2.g5ia77u1.qu0x051f.esr5mh6w.e9989ue4.r7d6kgcz.rq0escxv.nhd2j8a9.nc684nl6.p7hjln8o.kvgmc6g5.cxmmr5t8.oygrvhab.hcukyx3x.jb3vyjys.rz4wbd8a.qt6c0cv9.a8nywdso.i1ao9s8h.esuyzwwr.f1sip0of.lzcic4wl.oo9gr5id.gpro0wi8.lrazzd5p").text
         except NoSuchElementException:
             logging.debug(f"No headline by: {e}")
             headline = "-"
@@ -161,17 +243,34 @@ class FBPostScraper:
         print(date)
         article = dict(title=headline, date=date, text=msg, url=url)
         try:
-            reaction = e.find_element_by_css_selector("._81hb").text
-            article["reactions"] = fbnumber(reaction)
+            msg = e.find_element_by_css_selector("div.kvgmc6g5.cxmmr5t8.oygrvhab.hcukyx3x.c1et5uql.ii04i59q").text
         except NoSuchElementException:
-            logging.debug(f"No reaction found: {e}")
+            logging.debug(f"No message by: {e}")
+            msg = "-"
+        if msg.strip() == "":
+            logging.debug(f"No message by: {e}")
+            msg = "-"
+        #url = e.find_element_by_css_selector("a.oajrlxb2.g5ia77u1.qu0x051f.esr5mh6w.e9989ue4.r7d6kgcz.rq0escxv.nhd2j8a9.nc684nl6.p7hjln8o.kvgmc6g5.cxmmr5t8.oygrvhab.hcukyx3x.jb3vyjys.rz4wbd8a.qt6c0cv9.a8nywdso.i1ao9s8h.esuyzwwr.f1sip0of.lzcic4wl.oo9gr5id.gpro0wi8.lrazzd5p")
+        #url = fbposturl(url.get_attribute("href"))
+        article = dict(title=headline, date=date, text=msg, url=url, medium="dtvnieuws")
+      #  print(f"artikel is {headline},{date}")
         try:
-            nremark = e.find_element_by_css_selector("._3hg-").text
-            article["nremarks"] = fbnumber(nremark)
+            lijst = [x.text for x in e.find_elements_by_xpath(".//div[@class='oajrlxb2 g5ia77u1 qu0x051f esr5mh6w e9989ue4 r7d6kgcz rq0escxv nhd2j8a9 nc684nl6 p7hjln8o kvgmc6g5 cxmmr5t8 oygrvhab hcukyx3x jb3vyjys rz4wbd8a qt6c0cv9 a8nywdso i1ao9s8h esuyzwwr f1sip0of lzcic4wl l9j0dhe7 abiwlrkh gpro0wi8 dwo3fsh8 ow4ym5g4 auili1gw du4w35lb gmql0nx0']")]
+            for i in lijst:
+                if 'opmerkingen' in i:
+                    remarks = i
+                    article['nremarks'] = fbnumber(remarks)
+                else:
+                    article['nremarks'] = 0
+                if 'gedeeld' in i:
+                    share = i
+                    article['nshares'] = fbnumber(share)
+                else:
+                    article['nshares'] = 0
         except NoSuchElementException:
             logging.debug(f"No remarks by: {e}")
         try:
-            share = e.find_element_by_css_selector("._3rwx").text
+            share = e.find_element_by_xpath("//div[@class='bp9cbjyn m9osqain j83agx80 jq4qci2q bkfpd7mw a3bd9o3v kvgmc6g5 wkznzc2l oygrvhab dhix69tm jktsbyx5 rz4wbd8a osnr6wyh a8nywdso s1tcr66n']").text
             article["shares"] = fbnumber(share)
         except NoSuchElementException:
             logging.debug(f"No shares by: {e}")
